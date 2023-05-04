@@ -17,45 +17,42 @@
 #also script to just send random messages on the VCAN 
 from math import sqrt
 from numpy import sign
-import socket
-class Duckie_Sender:
-    def __init__(self,port,ip) -> None:
-        self.port = port
-        self.ip=ip
-
-class VCAN_Sender:
-    def __init__(self) -> None:
-        pass
-
+from can import Bus, Message
 class Controller:
-    #axes = [0,0]
-    #is_forward_gear = True #is the gear forward or reverse
-    def __init__(self, axes=[0,0], forward_gear=True, throttle=0) -> None:
-        self.axes = axes
-        self.is_forward_gear = forward_gear
-        self.throttle = throttle
-        self.steering_percent = 0
-        self.calc_steering()
-    
-    def update_axes(self, axis, pos):
-        self.axes[axis] = pos
-        self.calc_steering()
-
-    def update_throttle(self, throttle):
-        self.throttle = (throttle * 100 if self.is_forward_gear else -(throttle*100))
-        print(self.throttle)
-
-    def change_gear(self, change=True):
-        if change:
-            self.is_forward_gear = not self.is_forward_gear
-            self.throttle = - self.throttle
-            print(self.is_forward_gear)
+    def __init__(self) -> None:
+        self.axes = [0,0]
+        self.is_forward_gear = True
+        self.throttle = 0
+        self.steering = 0
+        self.bus = Bus(interface='socketcan',channel='vcan0', bitrate = 250000)
     
     def calc_steering(self):
-        mag = sqrt(self.axes[0]**2 + self.axes[1]**2) * 100 #joystick percentage distance from center
-        mag = min( 100, max( 0, mag ) ) #clamping value to between 0 -> 100
-        self.steering_percent = mag * sign(self.axes[0]) # adding left/right direction info
-        print(self.steering_percent)
+        mag = int(sqrt(self.axes[0]**2 + self.axes[1]**2) * 127 * sign(self.axes[0]))#joystick percentage distance from center
+        if self.axes[0] < 0: mag += 256
+        self.steering = mag
+
+    def v2_send(self, id, val):
+        match id:
+            case "Axis 3" | "-Axis 3": #right analog stick left/right
+                self.axes[0] = val
+                self.calc_steering()
+                msg_id = 2; msg_val = [self.steering]
+            case "Axis 4" | "-Axis 4": #right analog stick up/down
+                self.axes[1] = val
+                self.calc_steering()
+                msg_id = 2; msg_val = [self.steering]
+            case "Axis 2": # left trigger (throttle)
+                msg_id = 1; msg_val = [int(val*255)]
+            case "Button 0": # x button (gear)
+                if val:
+                    self.is_forward_gear = not self.is_forward_gear
+                    msg_id = 3; msg_val = [1] if self.is_forward_gear else [255]
+                else: return
+            case _:#wildcard
+                return
+        self.bus.send(Message(arbitration_id=msg_id,data=msg_val,is_extended_id=False))
+
+        
 
 
 
@@ -68,7 +65,7 @@ from qt_thread_updater import ThreadUpdater
 
 from qtpy import QtWidgets, QtGui, QtCore
 
-ct = Controller([0,0],True)
+ct = Controller()
 
 app = QtWidgets.QApplication([])
 
@@ -111,36 +108,12 @@ mover.paintEvent = svg_paint_event.__get__(mover, mover.__class__)
 
 def handle_key_event(key):
     updater.now_call_latest(lbl.setText, '{}: {} = {}'.format(key.joystick, key, key.value))
+    ct.v2_send(key,key.value)
 
-    #print(key, '-', key.keytype, '-', key.number, '-', key.value)
-
-    #if key.keytype == "Button":
-        #change gear
-
-    #if key in ["Axis 2", "-Axis 2"]: #right analog stick left-right
-    #   ct.update_axes(0,key.value)
-
-    #elif key in ["Axis 3", "-Axis 3"]: #right analog stick up-down
-    #    ct.update_axes(1,key.value)
-
-    #elif key == "Axis 4": #left trigger
-    #    ct.update_throttle(key.value)
-
-    match key: #requires python 3.10 or higher
-        case "Axis 2" | "-Axis 2": #right analog stick left/right
-            ct.update_axes(0,key.value)
-        case "Axis 3" | "-Axis 3": #right analog stick up/down
-            ct.update_axes(1,key.value)
-        case "Axis 4": # left trigger
-            ct.update_throttle(key.value)
-        case "Button 0": # x button
-            ct.change_gear(key.value)
-
-    return
-    updater.now_call_latest(mover.move, mover.point)
 
 # If it button is held down it should be repeated
-repeater = pyjoystick.HatRepeater(first_repeat_timeout=0.5, repeat_timeout=0.03, check_timeout=0.01)
+#repeater = pyjoystick.HatRepeater(first_repeat_timeout=0.5, repeat_timeout=0.03, check_timeout=0.01)
+repeater = pyjoystick.Repeater(first_repeat_timeout=1.0, repeat_timeout=0.5, check_timeout=0.01)
 
 mngr = pyjoystick.ThreadEventManager(event_loop=run_event_loop,
                                      handle_key_event=handle_key_event,
