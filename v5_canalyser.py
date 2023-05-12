@@ -160,28 +160,9 @@ def run(resolution=0.01, max_time=10, ids=[],comps={},tc_set = {}, slp=0):
     return id_list, components
 
 
-def do_linear_regression(id_list, components, predicted, spearman_threshold=0.2 ):
-
-    sum_diff=[]
-    for id in id_list: 
-        #id, val = components[comp].spearman[i]
-        #if abs(val) < spearman_threshold:continue
-
-        readings = components[id].readings_quantised
-        #print(readings)
-        sum_diff.append( [ id, sum( abs(readings[i] - predicted[i]) for i in range(len(readings)))    ] )
-    print(f"sum_diff: {sum_diff}")
-    sum_diff = sorted(sum_diff, key=lambda s:s[1])
-    return sum_diff
-
-
-def v2_linear_regression(guess, id_list, components, prev_guesses, spearman_threshold=0.0):
+def do_linear_regression(guess, id_list, components, prev_guesses, spearman_threshold=0.0):
     
     independents = contributing_factors[guess]
-    print("-----------")
-    print(prev_guesses)
-    print(independents)
-    print("-----------")
 
     independent_ids = [prev_guesses[v] for v in independents]
     spearman_dict = {}
@@ -233,52 +214,45 @@ if __name__ == '__main__':
     print(sp_list)
 
     solutions = {"avg_vel": [sp[0] for sp in sp_list], "gear":[], "throttle":[],"brake":[],"steering":[],"left_wheel":[],"right_wheel":[]}
-    threshold = 0.15 * num_intervals #multiplying once is easier than dividing every time
-#    while len(solutions["avg_vel"])>0:
-#        vel_not_correct=False
+    threshold = 0.35 * num_intervals #multiplying once is easier than dividing every time
+    while len(solutions["avg_vel"]) > 0: # remove if not working :(
+        id_list= [s[0] for s in sp_list]
+        id_list.remove(solutions["avg_vel"][-1])
+        num_loops = len(regression_order); i=0
+        while i < num_loops:
+            prev_guess = {}
+            for s in solutions:
+                if solutions[s] == []: continue
+                prev_guess[s] = solutions[s][-1]
+
+            sum_diff = do_linear_regression(regression_order[i], id_list, components,prev_guess)
+            print(f"{i}: {sum_diff}")
+            for sd in sum_diff:
+                if sd[1] < threshold:
+                    solutions[regression_order[i]].append(sd[0])
         
-    #guess = solutions["avg_vel"].pop()
-    #guesses = {"avg_vel":guess, "gear":-1, "throttle":-1,"brake":-1,"steering":-1,"left_wheel":-1,"right_wheel":-1}
-        #guesses = {"avg_vel":sp_list[0][0]}#, "gear":-1, "throttle":-1,"brake":-1,"steering":-1,"left_wheel":-1,"right_wheel":-1}
+            if len(solutions[regression_order[i]])>0:
+                id_list.remove(solutions[regression_order[i]][-1])
+                i+=1
 
-        #guesses["avg_vel"] = 7
-    #id_list = [s[0] for s in components[guesses["avg_vel"]].spearman]
-    id_list= [s[0] for s in sp_list]
-    id_list.remove(solutions["avg_vel"][-1])
-    num_loops = len(regression_order); i=0
-    while i < num_loops:
-        prev_guess = {}
-        for s in solutions:
-            if solutions[s] == []: continue
-            prev_guess[s] = solutions[s][-1]
-
-        sum_diff = v2_linear_regression(regression_order[i], id_list, components,prev_guess)
-        print(f"{i}: {sum_diff}")
-        for sd in sum_diff:
-            if sd[1] > threshold:
-                solutions[regression_order[i]].append(sd[0])
-        
-        if len(solutions[regression_order[i]])>0:
-            id_list.remove(solutions[regression_order[i]][-1])
-            i+=1
-
-        else:            
-            while solutions[regression_order[i]] == []:
-                incorrect = solutions[regression_order[i-1]].pop()
-                id_list.append(incorrect)
-                if i == 0 and solutions[regression_order[i]] == []:
-                    incorrect = solutions["avg_vel"].pop()
-                    id_list.append(incorrect)
-                    break
-                elif solutions[regression_order[i-1]] == []:
-                    i-=1
-                else: break
+            else:            
+                while solutions[regression_order[i]] == []:
+                    if i > 0:
+                        incorrect = solutions[regression_order[i-1]].pop()
+                        id_list.append(incorrect)
+                    if i == 0 and solutions[regression_order[i]] == []:
+                        incorrect = solutions["avg_vel"].pop()
+                        id_list.append(incorrect)
+                        break
+                    elif solutions[regression_order[i-1]] == []:
+                     i-=1
+                    else: break
 
     print(solutions)
     guesses = {}
     for s in solutions:
         if solutions[s] == []: continue
-        prev_guess[s] = solutions[s][-1]
+        guesses[s] = solutions[s][-1]
             
 
     spearman = components[guesses["avg_vel"]].spearman
@@ -303,9 +277,9 @@ if __name__ == '__main__':
     print(f"wheel1: {wheel2_spearman_ids}")
     diff = []
     for id in id_list:
-        w1_index = components[wheel1].spearman.index(id)
+        w1_index = wheel1_spearman_ids.index(id)
         w1_val = components[wheel1].spearman[w1_index]
-        w2_index = components[wheel2].spearman.index(id)
+        w2_index = wheel2_spearman_ids.index(id)
         w2_val = components[wheel2].spearman[w2_index]
             
         d = abs(w1_val[1] -w2_val[1])
