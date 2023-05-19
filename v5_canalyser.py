@@ -165,6 +165,7 @@ def do_linear_regression(guess, id_list, components, prev_guesses, spearman_thre
     independents = contributing_factors[guess]
 
     independent_ids = [prev_guesses[v] for v in independents]
+
     spearman_dict = {}
     for indy in independent_ids:
         spearman = components[indy].spearman
@@ -174,13 +175,14 @@ def do_linear_regression(guess, id_list, components, prev_guesses, spearman_thre
                 spearman_dict[s[0]] = []
             spearman_dict[s[0]].append(s[1])
     #now we have a dict of spearman scores for all guesses of contributing factors
-    #print(spearman_dict)
+
     
     prediction_args = [components[id].readings_quantised for id in independent_ids]
     prediction = linear_regressions[guess](*prediction_args)
     sum_diff = []
+
     for id in id_list:
-        #print(f"id: {id}")
+
         if id not in spearman_dict: continue
         read = components[id].readings_quantised
         sum_diff.append( [id, sum ( abs( read[r] - prediction[r] ) for r in range(len(read))) ])
@@ -192,7 +194,7 @@ def do_linear_regression(guess, id_list, components, prev_guesses, spearman_thre
 
 
 if __name__ == '__main__':
-    resolution = 0.05; max_time = 30; num_intervals = int(max_time/resolution)
+    resolution = 0.05; max_time = 15; num_intervals = int(max_time/resolution)
 
     id_list, components = run(resolution=resolution,max_time=max_time)
 
@@ -213,58 +215,86 @@ if __name__ == '__main__':
     sp_list = sorted(sp_list,key = lambda sp:abs(sp[1]), reverse=False)
     print(sp_list)
 
-    solutions = {"avg_vel": [sp[0] for sp in sp_list], "gear":[], "throttle":[],"brake":[],"steering":[],"left_wheel":[],"right_wheel":[]}
+    all_guesses = []
+    solutions = {"avg_vel": [[sp[0],0] for sp in sp_list], "gear":[], "throttle":[],"brake":[],"steering":[],"left_wheel":[],"right_wheel":[]}
+
     threshold = 0.35 * num_intervals #multiplying once is easier than dividing every time
     while len(solutions["avg_vel"]) > 0: # remove if not working :(
+        solutions["gear"] = [];solutions["throttle"] = [];solutions["brake"] = [];solutions["steering"] = [];solutions["left_wheel"] = [];solutions["right_wheel"] = []
+        
+        total_sum_diff = 0
         id_list= [s[0] for s in sp_list]
-        id_list.remove(solutions["avg_vel"][-1])
+        id_list.remove(solutions["avg_vel"][-1][0])
+
         num_loops = len(regression_order); i=0
-        while i < num_loops:
+        while i < num_loops and len(solutions["avg_vel"])>0:
+
             prev_guess = {}
             for s in solutions:
                 if solutions[s] == []: continue
-                prev_guess[s] = solutions[s][-1]
+                prev_guess[s] = solutions[s][-1][0]
 
             sum_diff = do_linear_regression(regression_order[i], id_list, components,prev_guess)
-            print(f"{i}: {sum_diff}")
+
             for sd in sum_diff:
                 if sd[1] < threshold:
-                    solutions[regression_order[i]].append(sd[0])
+                    solutions[regression_order[i]].append([sd[0],sd[1]])
+                    
         
             if len(solutions[regression_order[i]])>0:
-                id_list.remove(solutions[regression_order[i]][-1])
+                id_list.remove(solutions[regression_order[i]][-1][0])
                 i+=1
 
             else:            
                 while solutions[regression_order[i]] == []:
                     if i > 0:
                         incorrect = solutions[regression_order[i-1]].pop()
-                        id_list.append(incorrect)
+                        id_list.append(incorrect[0])
+                        if solutions[regression_order[i-1]] == []:
+                            i-=1
+                            continue
+                        id_list.remove(solutions[regression_order[i-1]][-1][0])
                     if i == 0 and solutions[regression_order[i]] == []:
                         incorrect = solutions["avg_vel"].pop()
-                        id_list.append(incorrect)
+                        id_list.append(incorrect[0])
+                        if solutions["avg_vel"] == []: break
+                        id_list.remove(solutions["avg_vel"][-1][0])
                         break
-                    elif solutions[regression_order[i-1]] == []:
-                     i-=1
+                    elif solutions[regression_order[i-1]] == []: #pretty sure this is unnecessary but -\_o_/
+                        i-=1
                     else: break
 
-    print(solutions)
-    guesses = {}
-    for s in solutions:
-        if solutions[s] == []: continue
-        guesses[s] = solutions[s][-1]
-            
-
-    spearman = components[guesses["avg_vel"]].spearman
+        #working out total_sum_diff
+        guesses = {}; total_sum_diff=0
+        for s in solutions:
+            if solutions[s] == []: 
+                continue
+            guesses[s] = solutions[s][-1][0]
+            total_sum_diff += solutions[s][-1][1] #this is wrong, somehow...
+        all_guesses.append([total_sum_diff,guesses])
+        print(guesses)
+        if len(solutions["avg_vel"])>0: solutions["avg_vel"].pop()
+    all_guesses = sorted(all_guesses,key=lambda g:g[0])
+    print(all_guesses)
+    
+    guess = {}
+    for i in range(len(all_guesses)):
+#        if all(x in all_guesses[i][1] for x in ("avg_vel","throttle","steering","brake")):
+        if {"avg_vel", "throttle","brake","gear"} <= set(all_guesses[i][1]):
+            guess = all_guesses[i][1]
+            break
+    
+    print(guess)
+    spearman = components[guess["avg_vel"]].spearman
     wheel1= 0; wheel2=0
     for s in spearman:
         if wheel2 and wheel1: break
-        if s[0] in id_list:
+        if s[0] not in guess.values():
             if wheel2:
                 wheel1 = s[0]
             else:
                 wheel2 = s[0]
-        else:continue
+
         
     guesses["left_wheel"] = wheel1
     guesses["right_wheel"] = wheel2
@@ -284,21 +314,21 @@ if __name__ == '__main__':
             
         d = abs(w1_val[1] -w2_val[1])
             
-        diff.append(id,d,w1_val[1], w2_val[1])
+        diff.append([id,d,w1_val[1], w2_val[1]])
     diff = sorted(diff, key=lambda d:d[1],reverse=True)
     biggest_diff = diff[0]
     print(f"biggest_diff: {biggest_diff}")
     guesses["steering"] = biggest_diff[0]
     if biggest_diff[2] > biggest_diff[3]:
-        guesses["left_wheel"] = wheel1
-        guesses["right_wheel"] = wheel2
+        guess["left_wheel"] = wheel1
+        guess["right_wheel"] = wheel2
     else:
-        guesses["right_wheel"] = wheel2
-        guesses["left_wheel"] = wheel1
+        guess["right_wheel"] = wheel2
+        guess["left_wheel"] = wheel1
 
         # if sum(sum_diff)  < 1000: break, or something
     #break
-    print(guesses)
+    print(guess)
 
     exit()
 

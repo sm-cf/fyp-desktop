@@ -36,17 +36,19 @@ class Controller:
             case "Axis 3" | "-Axis 3": #right analog stick left/right
                 self.axes[0] = val
                 self.calc_steering()
-                msg_id = 2; msg_val = [self.steering]
+                msg_id = 3; msg_val = [self.steering]
             case "Axis 4" | "-Axis 4": #right analog stick up/down
                 self.axes[1] = val
                 self.calc_steering()
-                msg_id = 2; msg_val = [self.steering]
+                msg_id = 3; msg_val = [self.steering]
             case "Axis 2": # left trigger (throttle)
                 msg_id = 1; msg_val = [int(val*255)]
+            case "Axis 5": #right trigger (brake)
+                msg_id = 2; msg_val = [int(val*255)]
             case "Button 0": # x button (gear)
                 if val:
                     self.is_forward_gear = not self.is_forward_gear
-                    msg_id = 3; msg_val = [1] if self.is_forward_gear else [255]
+                    msg_id = 4; msg_val = [1] if self.is_forward_gear else [255]
                 else: return
             case _:#wildcard
                 return

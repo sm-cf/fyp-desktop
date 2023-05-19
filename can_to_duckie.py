@@ -6,27 +6,39 @@ class CTD:
         self.throttle = 0
         self.steering = 0
         self.gear = 1
+        self.brake=0
         self.sock = sock
 
     def convert(self,msg):
-        data = int(msg.data.hex(),16)
-        if msg.arbitration_id == 1: #throttle
-            self.throttle = (data/255.0)*self.gear
-        elif msg.arbitration_id == 3: #gear
-            self.gear = 1 if data == 1 else -1
-        elif(data > 127): # steering 
-            self.steering = (data - 255)/127.0
-        else:
-            self.steering = data/127.0
-        return bytes(f"{self.throttle}:{-self.steering};",encoding="utf-8")
+        try:
+            data = int(msg.data.hex(),16)
+        except: 
+            return None
+        if data < 0 or data > 255: return None
+
+        match msg.arbitration_id:
+            case 1: # throttle
+                self.throttle = (data/255.0)
+            case 2: # brake
+                self.brake = data/255.0
+            case 3: # steering
+                if data > 127: data -=256
+                self.steering = data/127.0
+            case 4: # gear
+                if data == 1: self.gear=1
+                elif data == 255: self.gear=-1
+                else: return None
+
+        return bytes(f"{(max(0,self.throttle-self.brake))*self.gear}:{-(self.steering*self.throttle)};",encoding="utf-8")
             
     def can_to_duck(self):
         with Bus(interface='socketcan',channel='vcan0', bitrate = 250000) as conn:
             while True:
                 msg = conn.recv()
-                if msg.arbitration_id>3: continue
+                if msg.arbitration_id>4: continue
                 duckie_msg = self.convert(msg)
-                self.sock.sendall(duckie_msg)
+                if duckie_msg is not None:
+                    self.sock.sendall(duckie_msg)
 
 if __name__ == '__main__':
     HOST = "myrobot.local"#"192.168.0.46"#myrobot.local

@@ -182,6 +182,43 @@ for j in range(0,len(id_list)):
 #print(components[1].spearman_scores)
 #print(components[1].readings_quantised)
 
+print("-------")
+sp_list = []
+for comp in components:
+    sp_sum = sum(components[comp].spearman_scores)
+    sp_list += [[comp.id, sp_sum]]
+    print(f"{components[comp].id}: {sp_sum}")
+sp_list = sorted(sp_list,key = lambda sp:sp[1], reverse=True)
+
+# get comp with biggest sp_val 
+# start recording traffic again
+# play minimum value from comp 5 secs, max value from comp 5 secs
+# or maybe have it gradually increase from min to max over 10 secs (probably better)
+# if it is an input, then the sp_val will remain similar
+# if it is an output, the sp_val will be lower
+# if it is an input
+    #maybe look at the values of other comps?
+    # if throttle high
+        # abs(vel, wheels) high too
+    # if steering high
+        # abs(wheels) high too
+        # vel probably stays the same
+    # if gear:
+        # 1 = vel, wheels are positive
+        # -1 = vel, wheels are negative
+
+# if it is an output then ...
+#   look at what spearman scores have decreased?
+#       for wheel:
+#           steering, opposite wheel, throttle, gear, avg_vel
+#       for vel:
+#           wheels, throttle, gear, steering
+#   case: one goes from really high to really low:
+#       kill me
+
+
+exit()
+#cheaty bit
 print("----------------------------------------")
 for i in range(0,len(components[1].readings_quantised)):
     if components[3].readings_quantised[i]:

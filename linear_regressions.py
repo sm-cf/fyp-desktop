@@ -4,9 +4,6 @@ linear_regressions = {
     "left_wheel": lambda throttle,gear,steering,brake: [0.5*(throttle[i]-brake[i])* gear[i] + 0.4*steering[i] for i in range(len(steering))], #0.5 , 0.4 if brake, 0.4 0.4 if no brake
     "right_wheel": lambda throttle,gear, steering,brake: [0.45*(throttle[i]-brake[i])*gear[i] - 0.4*steering[i] for i in range(len(steering))], #0.45, -0.4 if brake,  0.36 -0.4 if no brake
 
-
-
-
     "gear": lambda vel: [sign(v) for v in vel],
     "throttle": lambda vel,gear: [vel[i]*gear[i] for i in range(len(vel))],
     "brake": lambda vel, throttle, gear: [0.5*throttle[i]*gear[i]-0.5*vel[i] for i in range(len(vel))],#[abs(5*vel[i]/(throttle[i]*gear[i])) for i in range(len(vel))]
@@ -26,6 +23,6 @@ contributing_factors = {
     "steering":["left_wheel","right_wheel"]
 }
 
-regression_order = ["gear","throttle","brake","left_wheel","right_wheel","steering"]
+regression_order = ["gear","throttle","brake"]#,"left_wheel","right_wheel","steering"]
 #th_mul=0.2
 #st_mul = 0.36
